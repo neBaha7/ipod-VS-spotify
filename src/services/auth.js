@@ -2,8 +2,6 @@ import { initializeApp } from "firebase/app";
 import {
     getAuth,
     signInWithPopup,
-    signInWithRedirect,
-    getRedirectResult,
     GoogleAuthProvider,
     signOut,
     onAuthStateChanged
@@ -28,47 +26,15 @@ if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
     console.warn("Firebase config missing. Using mock auth.");
 }
 
-// Check for redirect result after page reload (mobile Safari flow)
-export const checkRedirectResult = async () => {
-    if (!auth) return null;
-    try {
-        const result = await getRedirectResult(auth);
-        return result?.user || null;
-    } catch (error) {
-        console.warn("Redirect result check:", error.code);
-        return null;
-    }
-};
-
-// Detect if we should use redirect instead of popup
-const shouldUseRedirect = () => {
-    const ua = navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(ua);
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    return isIOS || isMobile;
-};
-
 export const loginWithGoogle = async () => {
     if (!auth) return mockLogin();
 
     const provider = new GoogleAuthProvider();
-
-    if (shouldUseRedirect()) {
-        // Use redirect for mobile — avoids storage partitioning issues on Safari
-        await signInWithRedirect(auth, provider);
-        return null;
-    }
-
-    // Desktop: use popup for a smoother experience
     try {
         const result = await signInWithPopup(auth, provider);
         return result.user;
     } catch (error) {
-        if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-            await signInWithRedirect(auth, provider);
-            return null;
-        }
-        console.error("Login failed", error);
+        console.error("Login failed", error.code, error.message);
         throw error;
     }
 };
@@ -82,6 +48,9 @@ export const subscribeToAuth = (callback) => {
     if (!auth) return () => { };
     return onAuthStateChanged(auth, callback);
 };
+
+// No-op for compatibility
+export const checkRedirectResult = async () => null;
 
 // --- Mocks ---
 const mockLogin = async () => {
