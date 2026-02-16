@@ -19,7 +19,7 @@ export const useClickWheel = (containerRef, onScroll, onSelect, onMenu, onBack) 
     };
 
     const handleStart = useCallback((e) => {
-        // e.preventDefault(); // Prevent default text selection
+        if (e.touches) e.preventDefault(); // Prevent page scroll on mobile
         stateRef.current.isDragging = true;
         stateRef.current.startAngle = getAngle(e);
         stateRef.current.prevAngle = stateRef.current.startAngle;
@@ -28,6 +28,7 @@ export const useClickWheel = (containerRef, onScroll, onSelect, onMenu, onBack) 
 
     const handleMove = useCallback((e) => {
         if (!stateRef.current.isDragging) return;
+        if (e.touches) e.preventDefault(); // Prevent page scroll on mobile
         const currentAngle = getAngle(e);
         let delta = currentAngle - stateRef.current.prevAngle;
 
