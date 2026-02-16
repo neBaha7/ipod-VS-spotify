@@ -24,23 +24,28 @@ let auth;
 if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY') {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-
-    // Handle redirect result on page load (for mobile Safari)
-    getRedirectResult(auth).catch((error) => {
-        console.warn("Redirect result error (may be normal on first load):", error.code);
-    });
 } else {
     console.warn("Firebase config missing. Using mock auth.");
 }
 
+// Check for redirect result after page reload (mobile Safari flow)
+export const checkRedirectResult = async () => {
+    if (!auth) return null;
+    try {
+        const result = await getRedirectResult(auth);
+        return result?.user || null;
+    } catch (error) {
+        console.warn("Redirect result check:", error.code);
+        return null;
+    }
+};
+
 // Detect if we should use redirect instead of popup
-// Mobile Safari and some browsers block popups
-const isMobileSafari = () => {
+const shouldUseRedirect = () => {
     const ua = navigator.userAgent;
     const isIOS = /iPad|iPhone|iPod/.test(ua);
-    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    return isIOS || (isSafari && isMobile);
+    return isIOS || isMobile;
 };
 
 export const loginWithGoogle = async () => {
@@ -48,11 +53,9 @@ export const loginWithGoogle = async () => {
 
     const provider = new GoogleAuthProvider();
 
-    if (isMobileSafari()) {
-        // Use redirect for mobile Safari — avoids storage partitioning issues
+    if (shouldUseRedirect()) {
+        // Use redirect for mobile — avoids storage partitioning issues on Safari
         await signInWithRedirect(auth, provider);
-        // This won't return — the page redirects to Google
-        // After redirect back, getRedirectResult (above) + onAuthStateChanged will handle it
         return null;
     }
 
@@ -61,7 +64,6 @@ export const loginWithGoogle = async () => {
         const result = await signInWithPopup(auth, provider);
         return result.user;
     } catch (error) {
-        // If popup is blocked, fall back to redirect
         if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
             await signInWithRedirect(auth, provider);
             return null;
