@@ -66,9 +66,9 @@ export const useMenu = () => {
         } else if (item.type === 'action') {
             handleAction(item);
         } else if (item.type === 'track') {
-            // Show track action menu instead of immediately playing
-            pendingActionTrackRef.current = item;
-            setPath([...path, 'trackActions']);
+            // Play track immediately on tap
+            addToQueue(item);
+            setPath([...path, 'nowplaying']);
             setSelectedIndex(0);
         }
     }, [currentMenu, selectedIndex, path, play, addToQueue]);
