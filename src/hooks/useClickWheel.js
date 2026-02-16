@@ -18,7 +18,17 @@ export const useClickWheel = (containerRef, onScroll, onSelect, onMenu, onBack) 
         return Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
     };
 
+    const isButton = (el) => {
+        while (el) {
+            if (el.dataset && el.dataset.button) return true;
+            el = el.parentElement;
+        }
+        return false;
+    };
+
     const handleStart = useCallback((e) => {
+        // Don't intercept taps on buttons (MENU, forward, backward, play, center)
+        if (isButton(e.target)) return;
         if (e.touches) e.preventDefault(); // Prevent page scroll on mobile
         stateRef.current.isDragging = true;
         stateRef.current.startAngle = getAngle(e);
