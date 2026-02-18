@@ -1,20 +1,47 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import styles from './Screen.module.css';
-import { searchYouTube } from '../../services/youtube';
+import { searchYouTube, getSuggestions } from '../../services/youtube';
 
 const SearchScreen = ({ selectedIndex, onUpdateMenu }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
+    const [suggestions, setSuggestions] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const debounceRef = useRef(null);
+    const inputRef = useRef(null);
 
-    const doSearch = (q) => {
+    // Debounced suggestion fetcher — fires after each keystroke with 250ms delay
+    const fetchSuggestions = useCallback((q) => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+
+        if (!q || q.trim().length === 0) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        debounceRef.current = setTimeout(async () => {
+            try {
+                const s = await getSuggestions(q);
+                setSuggestions(s);
+                setShowSuggestions(s.length > 0);
+            } catch {
+                setSuggestions([]);
+            }
+        }, 250);
+    }, []);
+
+    // Full search — executes when user picks a suggestion or presses Enter
+    const doSearch = useCallback(async (q) => {
+        if (!q || q.trim().length === 0) return;
         setLoading(true);
-        setError(null);
-        searchYouTube(q).then(data => {
-            setResults(data);
-            setLoading(false);
+        setShowSuggestions(false);
+        setSuggestions([]);
 
+        try {
+            const data = await searchYouTube(q);
+            setResults(data);
             const items = data.map(track => ({
                 ...track,
                 type: 'track',
@@ -22,16 +49,23 @@ const SearchScreen = ({ selectedIndex, onUpdateMenu }) => {
                 id: track.id
             }));
             onUpdateMenu('search', items);
-        }).catch(err => {
-            setLoading(false);
-            setError('Search failed. Try again.');
+        } catch (err) {
             console.error('Search error:', err);
-        });
-    }
+        }
+        setLoading(false);
+    }, [onUpdateMenu]);
 
+    // Load initial results
     useEffect(() => {
-        doSearch('popular music'); // Initial load
+        doSearch('popular music');
     }, []); // Only on mount
+
+    // On query change → fetch suggestions
+    const handleChange = (e) => {
+        const val = e.target.value;
+        setQuery(val);
+        fetchSuggestions(val);
+    };
 
     const handleKeyDown = (e) => {
         if (e.key === 'Enter' && query.trim()) {
@@ -39,27 +73,72 @@ const SearchScreen = ({ selectedIndex, onUpdateMenu }) => {
         }
     };
 
+    // Pick a suggestion
+    const pickSuggestion = (s) => {
+        setQuery(s);
+        setShowSuggestions(false);
+        setSuggestions([]);
+        doSearch(s);
+    };
+
     return (
         <div className={styles.mainContent}>
-            <div className={styles.header}>
-                <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Search YouTube..."
-                    style={{
-                        width: '100%',
-                        border: 'none',
-                        background: 'transparent',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                        outline: 'none',
-                        color: 'inherit'
-                    }}
-                    autoFocus
-                />
+            {/* Search input header */}
+            <div className={styles.header} style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 13, opacity: 0.5 }}>🔍</span>
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={query}
+                        onChange={handleChange}
+                        onKeyDown={handleKeyDown}
+                        onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+                        placeholder="Search music..."
+                        style={{
+                            width: '100%',
+                            border: 'none',
+                            background: 'transparent',
+                            fontSize: '13px',
+                            fontWeight: 'bold',
+                            outline: 'none',
+                            color: 'inherit'
+                        }}
+                        autoFocus
+                    />
+                </div>
             </div>
+
+            {/* Suggestions dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+                <div style={{
+                    background: '#fffde7',
+                    borderBottom: '1px solid #e0d68a',
+                    maxHeight: 120,
+                    overflowY: 'auto'
+                }}>
+                    {suggestions.map((s, i) => (
+                        <div
+                            key={i}
+                            onClick={() => pickSuggestion(s)}
+                            style={{
+                                padding: '3px 10px',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                                borderBottom: '1px solid #f0e8a0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6
+                            }}
+                        >
+                            <span style={{ fontSize: 10, opacity: 0.4 }}>🔍</span>
+                            <span style={{ fontWeight: 500 }}>{s}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Results / Loading / Empty */}
             {loading ? (
                 <div style={{
                     flex: 1, display: 'flex', alignItems: 'center',
@@ -75,23 +154,34 @@ const SearchScreen = ({ selectedIndex, onUpdateMenu }) => {
                     <div style={{ fontSize: 11, color: '#888' }}>Searching...</div>
                     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </div>
-            ) : error ? (
-                <div style={{ padding: 20, textAlign: 'center', color: '#c0392b', fontSize: 12 }}>
-                    {error}
-                </div>
             ) : results.length === 0 ? (
                 <div style={{ padding: 20, textAlign: 'center', color: '#888', fontSize: 12 }}>
-                    No results. Type a query and press Enter.
+                    No results. Type a query to search.
                 </div>
             ) : (
                 <ul className={styles.menuList}>
                     {results.map((item, index) => (
                         <li key={item.id} className={index === selectedIndex ? styles.active : ''}>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span style={{ fontWeight: '600', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {item.title}
-                                </span>
-                                <span style={{ fontSize: 10, opacity: 0.8 }}>{item.artist}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <img
+                                    src={item.thumbnail}
+                                    alt=""
+                                    style={{
+                                        width: 28, height: 28,
+                                        borderRadius: 3,
+                                        objectFit: 'cover',
+                                        flexShrink: 0
+                                    }}
+                                />
+                                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                    <span style={{
+                                        fontWeight: '600', fontSize: '11px',
+                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                                    }}>
+                                        {item.title}
+                                    </span>
+                                    <span style={{ fontSize: 9, opacity: 0.7 }}>{item.artist}</span>
+                                </div>
                             </div>
                         </li>
                     ))}
