@@ -6,11 +6,11 @@ const SearchScreen = ({ selectedIndex, onUpdateMenu }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
     const doSearch = (q) => {
         setLoading(true);
-        // Reset menu items so we validly "loading" state? 
-        // Or just keep old items until new ones load.
+        setError(null);
         searchYouTube(q).then(data => {
             setResults(data);
             setLoading(false);
@@ -22,16 +22,20 @@ const SearchScreen = ({ selectedIndex, onUpdateMenu }) => {
                 id: track.id
             }));
             onUpdateMenu('search', items);
+        }).catch(err => {
+            setLoading(false);
+            setError('Search failed. Try again.');
+            console.error('Search error:', err);
         });
     }
 
     useEffect(() => {
-        doSearch('popular'); // Initial load
+        doSearch('popular music'); // Initial load
     }, []); // Only on mount
 
     const handleKeyDown = (e) => {
-        if (e.key === 'Enter') {
-            doSearch(query);
+        if (e.key === 'Enter' && query.trim()) {
+            doSearch(query.trim());
         }
     };
 
@@ -57,7 +61,28 @@ const SearchScreen = ({ selectedIndex, onUpdateMenu }) => {
                 />
             </div>
             {loading ? (
-                <div style={{ padding: 20 }}>Loading...</div>
+                <div style={{
+                    flex: 1, display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', flexDirection: 'column', gap: 8
+                }}>
+                    <div style={{
+                        width: 20, height: 20,
+                        border: '2px solid #ddd',
+                        borderTopColor: '#4A90D9',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite'
+                    }} />
+                    <div style={{ fontSize: 11, color: '#888' }}>Searching...</div>
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+            ) : error ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#c0392b', fontSize: 12 }}>
+                    {error}
+                </div>
+            ) : results.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#888', fontSize: 12 }}>
+                    No results. Type a query and press Enter.
+                </div>
             ) : (
                 <ul className={styles.menuList}>
                     {results.map((item, index) => (

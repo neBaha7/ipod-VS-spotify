@@ -2,21 +2,18 @@ export const menus = {
     main: {
         title: 'iPod',
         items: [
-            { label: 'Cover Flow', id: 'coverflow', type: 'link' },
             { label: 'Music', id: 'music', type: 'menu' },
-            { label: 'Settings', id: 'settings', type: 'menu' },
-            { label: 'Now Playing', id: 'nowplaying', type: 'link' }
+            { label: 'Now Playing', id: 'nowplaying', type: 'link' },
+            { label: 'Settings', id: 'settings', type: 'menu' }
         ]
     },
     music: {
         title: 'Music',
         items: [
+            { label: 'Search', id: 'search', type: 'app' },
             { label: 'Queue', id: 'queue', type: 'app' },
             { label: 'Favorites', id: 'favorites', type: 'app' },
-            { label: 'Playlists', id: 'playlists', type: 'app' },
-            { label: 'Artists', id: 'artists', type: 'menu' },
-            { label: 'Songs', id: 'songs', type: 'menu' },
-            { label: 'Search', id: 'search', type: 'app' }
+            { label: 'Playlists', id: 'playlists', type: 'app' }
         ]
     },
     settings: {
@@ -56,8 +53,9 @@ export const menus = {
     trackActions: {
         title: 'Track Options',
         items: [
-            { label: 'Play Now', id: 'playNow', type: 'action', action: 'playNow' },
-            { label: 'Add to Playlist', id: 'addToPlaylist', type: 'action', action: 'addToPlaylist' }
+            { label: '▶  Play Now', id: 'playNow', type: 'action', action: 'playNow' },
+            { label: '+  Add to Queue', id: 'addToQueue', type: 'action', action: 'addToQueue' },
+            { label: '♪  Add to Playlist', id: 'addToPlaylist', type: 'action', action: 'addToPlaylist' }
         ]
     },
     addToPlaylist: {

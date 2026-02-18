@@ -11,14 +11,28 @@ import { useClickWheel } from '../../hooks/useClickWheel';
 
 const Shell = () => {
     const { ipodColor } = useAuth();
-    const { togglePlay, playNext, playPrevious } = usePlayer();
+    const { togglePlay, playNext, playPrevious, seekTo, progress } = usePlayer();
     const { createPlaylist, addToPlaylist, pendingTrack, setPendingTrack } = usePlaylist();
     const theme = useMemo(() => ipodColors[ipodColor] || ipodColors.silver, [ipodColor]);
 
-    const { currentMenu, selectedIndex, scroll, select, back, updateMenuItems, currentMenuId } = useMenu();
+    const { currentMenu, selectedIndex, scroll, select, back, updateMenuItems, currentMenuId, isLoading } = useMenu();
     const wheelRef = useRef(null);
 
-    useClickWheel(wheelRef, scroll);
+    // On NowPlaying: scroll seeks ±10s, elsewhere scroll navigates
+    const handleScroll = useCallback((direction) => {
+        if (currentMenuId === 'nowplaying') {
+            const seekAmount = 10; // seconds
+            const newTime = Math.max(0, Math.min(
+                progress.currentTime + (direction * seekAmount),
+                progress.duration || 0
+            ));
+            seekTo(newTime);
+        } else {
+            scroll(direction);
+        }
+    }, [currentMenuId, progress, seekTo, scroll]);
+
+    useClickWheel(wheelRef, handleScroll);
 
     const handleForward = () => {
         if (currentMenuId === 'nowplaying') {
@@ -62,6 +76,7 @@ const Shell = () => {
                 onUpdateMenu={updateMenuItems}
                 onGoBack={back}
                 onCreatePlaylist={handleCreatePlaylist}
+                isLoading={isLoading}
             />
             <ClickWheel
                 ref={wheelRef}
@@ -77,4 +92,3 @@ const Shell = () => {
 };
 
 export default Shell;
-

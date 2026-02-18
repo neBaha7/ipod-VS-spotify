@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import YouTube from 'react-youtube';
 
 const PlayerContext = createContext();
 
@@ -103,7 +104,7 @@ export const PlayerProvider = ({ children }) => {
         }
     }, [queue, queueIndex]);
 
-    // Playback Logic
+    // Playback Logic — plays a single track immediately, replaces entire queue
     const play = useCallback((track) => {
         setQueue([track]);
         setQueueIndex(0);
@@ -112,7 +113,18 @@ export const PlayerProvider = ({ children }) => {
         setProgress({ currentTime: 0, duration: 0 });
     }, []);
 
+    // Play a list of tracks starting at a given index
+    const playAll = useCallback((tracks, startIndex = 0) => {
+        if (!tracks || tracks.length === 0) return;
+        setQueue(tracks);
+        setQueueIndex(startIndex);
+        setCurrentTrack(tracks[startIndex]);
+        setIsPlaying(true);
+        setProgress({ currentTime: 0, duration: 0 });
+    }, []);
+
     const togglePlay = () => {
+        if (!currentTrack) return;
         if (isPlaying) {
             playerRef.current?.pauseVideo?.();
         } else {
@@ -120,6 +132,14 @@ export const PlayerProvider = ({ children }) => {
         }
         setIsPlaying(!isPlaying);
     };
+
+    // Seek to a specific time in seconds
+    const seekTo = useCallback((seconds) => {
+        if (playerRef.current && playerRef.current.seekTo) {
+            playerRef.current.seekTo(seconds, true);
+            setProgress(prev => ({ ...prev, currentTime: seconds }));
+        }
+    }, []);
 
     const onReady = (event) => {
         playerRef.current = event.target;
@@ -149,19 +169,35 @@ export const PlayerProvider = ({ children }) => {
         let interval;
         if (isPlaying && playerRef.current) {
             interval = setInterval(() => {
-                const currentTime = playerRef.current.getCurrentTime();
-                const duration = playerRef.current.getDuration();
-                setProgress({ currentTime, duration });
-            }, 1000);
+                try {
+                    const currentTime = playerRef.current.getCurrentTime();
+                    const duration = playerRef.current.getDuration();
+                    if (currentTime !== undefined && duration !== undefined) {
+                        setProgress({ currentTime, duration });
+                    }
+                } catch (e) {
+                    // Player not ready yet
+                }
+            }, 500);
         }
         return () => clearInterval(interval);
     }, [isPlaying]);
+
+    // YouTube player opts — hidden, audio only
+    const ytOpts = {
+        height: '0',
+        width: '0',
+        playerVars: {
+            autoplay: 1,
+        },
+    };
 
     return (
         <PlayerContext.Provider value={{
             currentTrack,
             isPlaying,
             play,
+            playAll,
             togglePlay,
             playerRef,
             onReady,
@@ -170,6 +206,7 @@ export const PlayerProvider = ({ children }) => {
             toggleFavorite,
             isFavorite,
             progress,
+            seekTo,
             // Queue
             queue,
             queueIndex,
@@ -180,6 +217,17 @@ export const PlayerProvider = ({ children }) => {
             playPrevious
         }}>
             {children}
+            {/* Persistent YouTube Player — always mounted, never unmounts on navigation */}
+            {currentTrack && (
+                <div style={{ position: 'fixed', top: -9999, left: -9999, width: 0, height: 0, overflow: 'hidden' }}>
+                    <YouTube
+                        videoId={currentTrack.id}
+                        opts={ytOpts}
+                        onReady={onReady}
+                        onStateChange={onStateChange}
+                    />
+                </div>
+            )}
         </PlayerContext.Provider>
     );
 };

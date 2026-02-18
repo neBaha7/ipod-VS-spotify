@@ -8,6 +8,7 @@ export const useMenu = () => {
     const [menus, setMenus] = useState(initialMenus);
     const [path, setPath] = useState(['main']); // Stack of menu IDs
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const [isLoading, setIsLoading] = useState(false);
     const { changeColor, login, logout, user } = useAuth();
     const { play, addToQueue } = usePlayer();
     const { pendingTrack, setPendingTrack, addToPlaylist, createPlaylist } = usePlaylist();
@@ -38,11 +39,33 @@ export const useMenu = () => {
     }, [currentMenu]);
 
     const select = useCallback(() => {
+        if (isLoading) return; // Don't allow selection during loading
         if (!currentMenu.items || currentMenu.items.length === 0) return;
 
         const item = currentMenu.items[selectedIndex];
 
         if (item.type === 'menu' || item.type === 'app') {
+            // Special case: Music menu gets a 1.3s loading delay
+            if (item.id === 'music') {
+                setIsLoading(true);
+                setTimeout(() => {
+                    setIsLoading(false);
+                    // If selecting a playlist from the playlists list, navigate to its detail
+                    if (item.id && item.id.startsWith('pl_')) {
+                        const detailMenuId = 'playlist_detail_' + item.id;
+                        setMenus(prev => ({
+                            ...prev,
+                            [detailMenuId]: prev[detailMenuId] || { title: item.label, items: [] }
+                        }));
+                        setPath(prev => [...prev, detailMenuId]);
+                    } else {
+                        setPath(prev => [...prev, item.id]);
+                    }
+                    setSelectedIndex(0);
+                }, 1300);
+                return;
+            }
+
             // If selecting a playlist from the playlists list, navigate to its detail
             if (item.id && item.id.startsWith('pl_')) {
                 const detailMenuId = 'playlist_detail_' + item.id;
@@ -60,18 +83,20 @@ export const useMenu = () => {
         } else if (item.type === 'back') {
             goBack();
         } else if (item.type === 'link') {
-            if (item.id === 'nowplaying') {
-                setPath([...path, 'nowplaying']);
+            // Handle all link-type items by navigating to their id as a menu
+            if (menus[item.id]) {
+                setPath([...path, item.id]);
+                setSelectedIndex(0);
             }
         } else if (item.type === 'action') {
             handleAction(item);
         } else if (item.type === 'track') {
-            // Play track immediately on tap
-            addToQueue(item);
-            setPath([...path, 'nowplaying']);
+            // Show track actions menu instead of playing immediately
+            pendingActionTrackRef.current = item;
+            setPath([...path, 'trackActions']);
             setSelectedIndex(0);
         }
-    }, [currentMenu, selectedIndex, path, play, addToQueue]);
+    }, [currentMenu, selectedIndex, path, play, addToQueue, isLoading, menus]);
 
     const goBack = useCallback(() => {
         if (path.length > 1) {
@@ -92,11 +117,20 @@ export const useMenu = () => {
             // Play the pending track
             const track = pendingActionTrackRef.current;
             if (track) {
-                addToQueue(track);
+                play(track);
                 pendingActionTrackRef.current = null;
                 // Replace trackActions in path with nowplaying
                 setPath(prev => [...prev.slice(0, -1), 'nowplaying']);
                 setSelectedIndex(0);
+            }
+        } else if (item.action === 'addToQueue') {
+            // Add the pending track to queue
+            const track = pendingActionTrackRef.current;
+            if (track) {
+                addToQueue(track);
+                pendingActionTrackRef.current = null;
+                // Go back to where we came from
+                goBack();
             }
         } else if (item.action === 'addToPlaylist') {
             // Navigate to addToPlaylist screen
@@ -134,6 +168,7 @@ export const useMenu = () => {
         back: goBack,
         path,
         updateMenuItems,
-        currentMenuId
+        currentMenuId,
+        isLoading
     };
 };

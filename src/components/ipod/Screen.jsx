@@ -46,7 +46,38 @@ const CreatePlaylistInput = ({ onDone }) => {
     );
 };
 
-const Screen = ({ menu, menuId, selectedIndex, onUpdateMenu, onGoBack, onCreatePlaylist }) => {
+const LoadingScreen = () => (
+    <div className={styles.mainContent}>
+        <div className={styles.header}>Music</div>
+        <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12
+        }}>
+            <div style={{
+                width: 24,
+                height: 24,
+                border: '3px solid #ddd',
+                borderTopColor: '#4A90D9',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite'
+            }} />
+            <div style={{ fontSize: 12, color: '#888', fontWeight: 500 }}>
+                Loading...
+            </div>
+        </div>
+        <style>{`
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+        `}</style>
+    </div>
+);
+
+const Screen = ({ menu, menuId, selectedIndex, onUpdateMenu, onGoBack, onCreatePlaylist, isLoading }) => {
     const { title, items } = menu;
 
     // Extract playlist ID from dynamic menu IDs like "playlist_detail_pl_123"
@@ -62,7 +93,9 @@ const Screen = ({ menu, menuId, selectedIndex, onUpdateMenu, onGoBack, onCreateP
                     </div>
                 </div>
 
-                {menuId === 'nowplaying' ? (
+                {isLoading ? (
+                    <LoadingScreen />
+                ) : menuId === 'nowplaying' ? (
                     <NowPlaying />
                 ) : menuId === 'search' ? (
                     <SearchScreen selectedIndex={selectedIndex} onUpdateMenu={onUpdateMenu} />
@@ -110,4 +143,3 @@ const Screen = ({ menu, menuId, selectedIndex, onUpdateMenu, onGoBack, onCreateP
 };
 
 export default Screen;
-
