@@ -1,99 +1,111 @@
 const API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 
-const MOCK_LIBRARY = [
-    { id: 'dQw4w9WgXcQ', title: 'Never Gonna Give You Up', artist: 'Rick Astley', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/default.jpg' },
-    { id: 'kJQP7kiw5Fk', title: 'Despacito', artist: 'Luis Fonsi', thumbnail: 'https://img.youtube.com/vi/kJQP7kiw5Fk/default.jpg' },
-    { id: 'L_jWHffIx5E', title: 'All Star', artist: 'Smash Mouth', thumbnail: 'https://img.youtube.com/vi/L_jWHffIx5E/default.jpg' },
-    { id: 'fJ9rUzIMcZQ', title: 'Bohemian Rhapsody', artist: 'Queen', thumbnail: 'https://img.youtube.com/vi/fJ9rUzIMcZQ/default.jpg' },
-    { id: 'hTWCb5ctq0s', title: 'One More Time', artist: 'Daft Punk', thumbnail: 'https://img.youtube.com/vi/hTWCb5ctq0s/default.jpg' },
-    { id: '9bZkp7q19f0', title: 'Gangnam Style', artist: 'PSY', thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/default.jpg' },
-    { id: 'JGwWNGJdvx8', title: 'Shape of You', artist: 'Ed Sheeran', thumbnail: 'https://img.youtube.com/vi/JGwWNGJdvx8/default.jpg' },
-    { id: 'RgKAFK5djSk', title: 'See You Again', artist: 'Wiz Khalifa ft. Charlie Puth', thumbnail: 'https://img.youtube.com/vi/RgKAFK5djSk/default.jpg' },
-    { id: 'CevxZvSJLk8', title: 'Roar', artist: 'Katy Perry', thumbnail: 'https://img.youtube.com/vi/CevxZvSJLk8/default.jpg' },
-    { id: 'YQHsXMglC9A', title: 'Hello', artist: 'Adele', thumbnail: 'https://img.youtube.com/vi/YQHsXMglC9A/default.jpg' },
-    { id: 'OPf0YbXqDm0', title: 'Uptown Funk', artist: 'Mark Ronson ft. Bruno Mars', thumbnail: 'https://img.youtube.com/vi/OPf0YbXqDm0/default.jpg' },
-    { id: 'bo_efYhYU2A', title: 'Sugar', artist: 'Maroon 5', thumbnail: 'https://img.youtube.com/vi/bo_efYhYU2A/default.jpg' },
-    { id: 'pRpeEdMmmQ0', title: 'Shake It Off', artist: 'Taylor Swift', thumbnail: 'https://img.youtube.com/vi/pRpeEdMmmQ0/default.jpg' },
-    { id: 'IcrbM1l_BoI', title: 'Counting Stars', artist: 'OneRepublic', thumbnail: 'https://img.youtube.com/vi/IcrbM1l_BoI/default.jpg' },
-    { id: 'lp-EO5I60KA', title: 'Somebody That I Used To Know', artist: 'Gotye', thumbnail: 'https://img.youtube.com/vi/lp-EO5I60KA/default.jpg' },
-    { id: 'QK8mJJJvaes', title: 'Blank Space', artist: 'Taylor Swift', thumbnail: 'https://img.youtube.com/vi/QK8mJJJvaes/default.jpg' },
-    { id: 'HP-MbfHFX9o', title: '7 Years', artist: 'Lukas Graham', thumbnail: 'https://img.youtube.com/vi/HP-MbfHFX9o/default.jpg' },
-    { id: 'e-ORhEE9VVg', title: 'Titanium', artist: 'David Guetta ft. Sia', thumbnail: 'https://img.youtube.com/vi/e-ORhEE9VVg/default.jpg' },
-    { id: 'YBHQbu5rbdQ', title: 'What Makes You Beautiful', artist: 'One Direction', thumbnail: 'https://img.youtube.com/vi/YBHQbu5rbdQ/default.jpg' },
-    { id: 'hT_nvWreIhg', title: 'Counting Stars', artist: 'OneRepublic', thumbnail: 'https://img.youtube.com/vi/hT_nvWreIhg/default.jpg' },
+// ── Free YouTube search via Piped API (no API key needed) ──────────────
+const PIPED_INSTANCES = [
+    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.adminforge.de',
+    'https://pipedapi.in.projectsegfau.lt',
 ];
 
-const getMockResults = (query) => {
-    if (!query || query.trim() === '') return MOCK_LIBRARY.slice(0, 10);
-    const q = query.toLowerCase();
-    const filtered = MOCK_LIBRARY.filter(r =>
-        r.title.toLowerCase().includes(q) || r.artist.toLowerCase().includes(q)
-    );
-    return filtered.length > 0 ? filtered : MOCK_LIBRARY.slice(0, 8);
+const searchPiped = async (query) => {
+    for (const instance of PIPED_INSTANCES) {
+        try {
+            const res = await fetch(`${instance}/search?q=${encodeURIComponent(query)}&filter=music_songs`, {
+                signal: AbortSignal.timeout(5000)
+            });
+            if (!res.ok) continue;
+            const data = await res.json();
+            if (!data.items || data.items.length === 0) continue;
+
+            return data.items
+                .filter(item => item.type === 'stream')
+                .slice(0, 15)
+                .map(item => ({
+                    id: item.url?.replace('/watch?v=', '') || '',
+                    title: item.title || 'Unknown',
+                    artist: item.uploaderName || 'Unknown Artist',
+                    thumbnail: item.thumbnail || `https://img.youtube.com/vi/${item.url?.replace('/watch?v=', '')}/default.jpg`
+                }));
+        } catch (e) {
+            console.warn(`Piped instance ${instance} failed:`, e.message);
+            continue;
+        }
+    }
+    return null; // All instances failed
 };
 
-// Use the YouTube suggest API (CORS-friendly via fetch) for autocomplete
+// ── YouTube Data API v3 search (requires API key) ────────────────────
+const searchYouTubeAPI = async (query) => {
+    const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=15&q=${encodeURIComponent(query)}&type=video&videoCategoryId=10&key=${API_KEY}`
+    );
+    const data = await response.json();
+
+    if (data.error) {
+        throw new Error(data.error.message);
+    }
+
+    return data.items.map(item => ({
+        id: item.id.videoId,
+        title: item.snippet.title,
+        artist: item.snippet.channelTitle,
+        thumbnail: item.snippet.thumbnails.default.url
+    }));
+};
+
+// ── Small fallback library (only used if ALL APIs fail) ──────────────
+const FALLBACK = [
+    { id: 'dQw4w9WgXcQ', title: 'Never Gonna Give You Up', artist: 'Rick Astley', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/default.jpg' },
+    { id: 'kJQP7kiw5Fk', title: 'Despacito', artist: 'Luis Fonsi', thumbnail: 'https://img.youtube.com/vi/kJQP7kiw5Fk/default.jpg' },
+    { id: 'JGwWNGJdvx8', title: 'Shape of You', artist: 'Ed Sheeran', thumbnail: 'https://img.youtube.com/vi/JGwWNGJdvx8/default.jpg' },
+    { id: 'RgKAFK5djSk', title: 'See You Again', artist: 'Wiz Khalifa ft. Charlie Puth', thumbnail: 'https://img.youtube.com/vi/RgKAFK5djSk/default.jpg' },
+    { id: 'OPf0YbXqDm0', title: 'Uptown Funk', artist: 'Bruno Mars', thumbnail: 'https://img.youtube.com/vi/OPf0YbXqDm0/default.jpg' },
+];
+
+// ── Main search function: tries Piped → YouTube API → fallback ───────
+export const searchYouTube = async (query) => {
+    if (!query || query.trim().length === 0) return FALLBACK;
+
+    // 1. Try Piped API first (free, no key needed)
+    try {
+        const pipedResults = await searchPiped(query);
+        if (pipedResults && pipedResults.length > 0) return pipedResults;
+    } catch (e) {
+        console.warn('Piped search failed:', e.message);
+    }
+
+    // 2. Try YouTube Data API if key is available
+    if (API_KEY && API_KEY !== 'YOUR_YOUTUBE_API_KEY') {
+        try {
+            const apiResults = await searchYouTubeAPI(query);
+            if (apiResults.length > 0) return apiResults;
+        } catch (e) {
+            console.warn('YouTube API search failed:', e.message);
+        }
+    }
+
+    // 3. Last resort: return fallback
+    console.warn('All search providers failed, using fallback');
+    return FALLBACK;
+};
+
+// ── Autocomplete suggestions via YouTube suggest API ─────────────────
 export const getSuggestions = async (query) => {
     if (!query || query.trim().length === 0) return [];
 
     try {
-        // YouTube's suggest API (returns JSONP but we can parse it)
         const res = await fetch(
             `https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&q=${encodeURIComponent(query)}`,
             { mode: 'cors' }
         );
         const text = await res.text();
-        // Response is JSONP: window.google.ac.h([...])
-        // Extract the JSON array from it
         const jsonStr = text.replace(/^[^[]*(\[.*\])[^]]*$/, '$1');
         const data = JSON.parse(jsonStr);
-        // data[1] contains suggestion arrays [[suggestion, ...], ...]
         if (data && data[1]) {
             return data[1].map(s => s[0]).slice(0, 8);
         }
         return [];
-    } catch (e) {
-        // Fallback: filter mock library for suggestions
-        const q = query.toLowerCase();
-        const suggestions = new Set();
-        MOCK_LIBRARY.forEach(r => {
-            if (r.title.toLowerCase().includes(q)) suggestions.add(r.title);
-            if (r.artist.toLowerCase().includes(q)) suggestions.add(r.artist);
-        });
-        return [...suggestions].slice(0, 8);
-    }
-};
-
-export const searchYouTube = async (query) => {
-    // Fallback to mock if no key provided
-    if (!API_KEY || API_KEY === 'YOUR_YOUTUBE_API_KEY') {
-        console.warn('Using Mock YouTube Data. Add VITE_YOUTUBE_API_KEY to .env for real results.');
-        return new Promise(resolve => {
-            setTimeout(() => resolve(getMockResults(query)), 200);
-        });
-    }
-
-    try {
-        const response = await fetch(
-            `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&q=${encodeURIComponent(query)}&type=video&key=${API_KEY}`
-        );
-        const data = await response.json();
-
-        if (data.error) {
-            console.error('YouTube API Error:', data.error.message, '— falling back to mock results');
-            return getMockResults(query);
-        }
-
-        const results = data.items.map(item => ({
-            id: item.id.videoId,
-            title: item.snippet.title,
-            artist: item.snippet.channelTitle,
-            thumbnail: item.snippet.thumbnails.default.url
-        }));
-
-        return results.length > 0 ? results : getMockResults(query);
-    } catch (error) {
-        console.error('Search failed:', error.message, '— falling back to mock results');
-        return getMockResults(query);
+    } catch {
+        return [];
     }
 };
