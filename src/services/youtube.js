@@ -1,13 +1,25 @@
+// Detect if running on Vercel (production) or local dev
+const IS_PROD = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+
 const API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
 
-// ── Free YouTube search via Piped API (no API key needed) ──────────────
+// ── Piped API instances (used directly in local dev) ─────────────────
 const PIPED_INSTANCES = [
     'https://pipedapi.kavin.rocks',
     'https://pipedapi.adminforge.de',
     'https://pipedapi.in.projectsegfau.lt',
 ];
 
-const searchPiped = async (query) => {
+const FALLBACK = [
+    { id: 'dQw4w9WgXcQ', title: 'Never Gonna Give You Up', artist: 'Rick Astley', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/default.jpg' },
+    { id: 'kJQP7kiw5Fk', title: 'Despacito', artist: 'Luis Fonsi', thumbnail: 'https://img.youtube.com/vi/kJQP7kiw5Fk/default.jpg' },
+    { id: 'JGwWNGJdvx8', title: 'Shape of You', artist: 'Ed Sheeran', thumbnail: 'https://img.youtube.com/vi/JGwWNGJdvx8/default.jpg' },
+    { id: 'OPf0YbXqDm0', title: 'Uptown Funk', artist: 'Bruno Mars', thumbnail: 'https://img.youtube.com/vi/OPf0YbXqDm0/default.jpg' },
+    { id: 'RgKAFK5djSk', title: 'See You Again', artist: 'Wiz Khalifa ft. Charlie Puth', thumbnail: 'https://img.youtube.com/vi/RgKAFK5djSk/default.jpg' },
+];
+
+// ── Search via Piped directly (local dev only) ───────────────────────
+const searchPipedDirect = async (query) => {
     for (const instance of PIPED_INSTANCES) {
         try {
             const res = await fetch(`${instance}/search?q=${encodeURIComponent(query)}&filter=music_songs`, {
@@ -16,83 +28,79 @@ const searchPiped = async (query) => {
             if (!res.ok) continue;
             const data = await res.json();
             if (!data.items || data.items.length === 0) continue;
-
             return data.items
-                .filter(item => item.type === 'stream')
+                .filter(i => i.type === 'stream')
                 .slice(0, 15)
-                .map(item => ({
-                    id: item.url?.replace('/watch?v=', '') || '',
-                    title: item.title || 'Unknown',
-                    artist: item.uploaderName || 'Unknown Artist',
-                    thumbnail: item.thumbnail || `https://img.youtube.com/vi/${item.url?.replace('/watch?v=', '')}/default.jpg`
+                .map(i => ({
+                    id: i.url?.replace('/watch?v=', '') || '',
+                    title: i.title || 'Unknown',
+                    artist: i.uploaderName || 'Unknown Artist',
+                    thumbnail: i.thumbnail || `https://img.youtube.com/vi/${i.url?.replace('/watch?v=', '')}/default.jpg`
                 }));
-        } catch (e) {
-            console.warn(`Piped instance ${instance} failed:`, e.message);
-            continue;
-        }
+        } catch { continue; }
     }
-    return null; // All instances failed
+    return null;
 };
 
-// ── YouTube Data API v3 search (requires API key) ────────────────────
-const searchYouTubeAPI = async (query) => {
-    const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=15&q=${encodeURIComponent(query)}&type=video&videoCategoryId=10&key=${API_KEY}`
-    );
-    const data = await response.json();
-
-    if (data.error) {
-        throw new Error(data.error.message);
-    }
-
-    return data.items.map(item => ({
-        id: item.id.videoId,
-        title: item.snippet.title,
-        artist: item.snippet.channelTitle,
-        thumbnail: item.snippet.thumbnails.default.url
-    }));
+// ── Search via Vercel serverless proxy (production) ──────────────────
+const searchProxy = async (query) => {
+    try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.length > 0 ? data : null;
+    } catch { return null; }
 };
 
-// ── Small fallback library (only used if ALL APIs fail) ──────────────
-const FALLBACK = [
-    { id: 'dQw4w9WgXcQ', title: 'Never Gonna Give You Up', artist: 'Rick Astley', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/default.jpg' },
-    { id: 'kJQP7kiw5Fk', title: 'Despacito', artist: 'Luis Fonsi', thumbnail: 'https://img.youtube.com/vi/kJQP7kiw5Fk/default.jpg' },
-    { id: 'JGwWNGJdvx8', title: 'Shape of You', artist: 'Ed Sheeran', thumbnail: 'https://img.youtube.com/vi/JGwWNGJdvx8/default.jpg' },
-    { id: 'RgKAFK5djSk', title: 'See You Again', artist: 'Wiz Khalifa ft. Charlie Puth', thumbnail: 'https://img.youtube.com/vi/RgKAFK5djSk/default.jpg' },
-    { id: 'OPf0YbXqDm0', title: 'Uptown Funk', artist: 'Bruno Mars', thumbnail: 'https://img.youtube.com/vi/OPf0YbXqDm0/default.jpg' },
-];
-
-// ── Main search function: tries Piped → YouTube API → fallback ───────
+// ── Main search function ─────────────────────────────────────────────
 export const searchYouTube = async (query) => {
     if (!query || query.trim().length === 0) return FALLBACK;
 
-    // 1. Try Piped API first (free, no key needed)
-    try {
-        const pipedResults = await searchPiped(query);
-        if (pipedResults && pipedResults.length > 0) return pipedResults;
-    } catch (e) {
-        console.warn('Piped search failed:', e.message);
+    // In production: use the server proxy to avoid CORS
+    if (IS_PROD) {
+        const results = await searchProxy(query);
+        if (results) return results;
+        return FALLBACK;
     }
 
-    // 2. Try YouTube Data API if key is available
+    // In local dev: try Piped directly, then YouTube API, then fallback
+    const pipedResults = await searchPipedDirect(query);
+    if (pipedResults) return pipedResults;
+
     if (API_KEY && API_KEY !== 'YOUR_YOUTUBE_API_KEY') {
         try {
-            const apiResults = await searchYouTubeAPI(query);
-            if (apiResults.length > 0) return apiResults;
-        } catch (e) {
-            console.warn('YouTube API search failed:', e.message);
-        }
+            const res = await fetch(
+                `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=15&q=${encodeURIComponent(query)}&type=video&key=${API_KEY}`
+            );
+            const data = await res.json();
+            if (!data.error && data.items) {
+                return data.items.map(i => ({
+                    id: i.id.videoId,
+                    title: i.snippet.title,
+                    artist: i.snippet.channelTitle,
+                    thumbnail: i.snippet.thumbnails.default.url
+                }));
+            }
+        } catch { /* fall through */ }
     }
 
-    // 3. Last resort: return fallback
-    console.warn('All search providers failed, using fallback');
     return FALLBACK;
 };
 
-// ── Autocomplete suggestions via YouTube suggest API ─────────────────
+// ── Autocomplete suggestions ─────────────────────────────────────────
 export const getSuggestions = async (query) => {
     if (!query || query.trim().length === 0) return [];
 
+    // In production: use the server proxy
+    if (IS_PROD) {
+        try {
+            const res = await fetch(`/api/suggest?q=${encodeURIComponent(query)}`);
+            if (!res.ok) return [];
+            return await res.json();
+        } catch { return []; }
+    }
+
+    // In local dev: call YouTube suggest directly
     try {
         const res = await fetch(
             `https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&q=${encodeURIComponent(query)}`,
@@ -101,11 +109,7 @@ export const getSuggestions = async (query) => {
         const text = await res.text();
         const jsonStr = text.replace(/^[^[]*(\[.*\])[^]]*$/, '$1');
         const data = JSON.parse(jsonStr);
-        if (data && data[1]) {
-            return data[1].map(s => s[0]).slice(0, 8);
-        }
+        if (data && data[1]) return data[1].map(s => s[0]).slice(0, 8);
         return [];
-    } catch {
-        return [];
-    }
+    } catch { return []; }
 };
